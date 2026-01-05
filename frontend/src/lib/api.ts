@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { LoginRequest, AuthResponse, AuditReport, Substitution, Course, Student } from '@/types';
+import { AuditReport, Substitution, Course, Student } from '@/types';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
@@ -9,28 +9,6 @@ const api = axios.create({
     'Content-Type': 'application/json',
   },
 });
-
-// Add token to requests if available
-api.interceptors.request.use((config) => {
-  if (typeof window !== 'undefined') {
-    const token = localStorage.getItem('token');
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
-    }
-  }
-  return config;
-});
-
-export const authApi = {
-  login: async (credentials: LoginRequest): Promise<AuthResponse> => {
-    const response = await api.post<AuthResponse>('/api/auth/login', credentials);
-    return response.data;
-  },
-  me: async (): Promise<Student> => {
-    const response = await api.get('/api/auth/me');
-    return response.data as Student;
-  },
-};
 
 export const auditApi = {
   getAuditReport: async (studentId: number): Promise<AuditReport> => {

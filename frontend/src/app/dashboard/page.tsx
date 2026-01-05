@@ -2,31 +2,32 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { AuditReport } from '@/types';
-import { auditApi } from '@/lib/api';
+import { AuditReport, Student } from '@/types';
+import { auditApi, studentApi } from '@/lib/api';
 
 export default function DashboardPage() {
   const router = useRouter();
   const [report, setReport] = useState<AuditReport | null>(null);
+  const [students, setStudents] = useState<Student[]>([]);
+  const [selectedStudentId, setSelectedStudentId] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
   useEffect(() => {
     const fetchAuditReport = async () => {
       try {
-        const raw = localStorage.getItem('studentDbId');
-        const studentDbId = raw ? Number(raw) : NaN;
-        if (!Number.isFinite(studentDbId)) {
-          router.push('/');
+        const all = await studentApi.list();
+        setStudents(all);
+        const initialId = all[0]?.id ?? null;
+        setSelectedStudentId(initialId);
+        if (!initialId) {
+          setError('No students found. Run the seed script to generate mock data.');
           return;
         }
-        const data = await auditApi.getAuditReport(studentDbId);
+        const data = await auditApi.getAuditReport(initialId);
         setReport(data);
       } catch (err: any) {
         setError('Failed to load audit report');
-        if (err.response?.status === 401) {
-          router.push('/');
-        }
       } finally {
         setLoading(false);
       }
@@ -36,20 +37,31 @@ export default function DashboardPage() {
   }, [router]);
 
   const handleLogout = () => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('userEmail');
-    router.push('/');
+    // Login removed. Keep a "home" button for UX symmetry.
+    router.push('/dashboard');
+  };
+
+  const handleStudentChange = async (id: number) => {
+    setSelectedStudentId(id);
+    setLoading(true);
+    setError('');
+    try {
+      const data = await auditApi.getAuditReport(id);
+      setReport(data);
+    } catch {
+      setError('Failed to load audit report');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleDownloadPDF = async () => {
     try {
-      const raw = localStorage.getItem('studentDbId');
-      const studentDbId = raw ? Number(raw) : NaN;
-      if (!Number.isFinite(studentDbId)) {
-        alert('Missing student id; please log in again.');
+      if (!selectedStudentId) {
+        alert('No student selected.');
         return;
       }
-      const blob = await auditApi.downloadPDF(studentDbId);
+      const blob = await auditApi.downloadPDF(selectedStudentId);
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
@@ -96,14 +108,12 @@ export default function DashboardPage() {
               <p className="text-sm text-gray-500">{report.student.name} - {report.student.student_id}</p>
             </div>
             <div className="flex gap-3">
-              {localStorage.getItem('isAdmin') === 'true' ? (
-                <button
-                  onClick={() => router.push('/admin')}
-                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50"
-                >
-                  Admin Panel
-                </button>
-              ) : null}
+              <button
+                onClick={() => router.push('/admin')}
+                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50"
+              >
+                Admin Panel
+              </button>
               <button
                 onClick={handleDownloadPDF}
                 className="px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-md hover:bg-primary-700"
@@ -123,6 +133,27 @@ export default function DashboardPage() {
 
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Student selector */}
+        <div className="bg-white rounded-lg shadow-md p-4 mb-6">
+          <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+            <div>
+              <h2 className="text-sm font-semibold text-gray-900">View audit as</h2>
+              <p className="text-xs text-gray-500">Login is disabled; select a seeded student.</p>
+            </div>
+            <select
+              className="w-full md:w-[28rem] border border-gray-300 rounded-md px-3 py-2 text-sm"
+              value={selectedStudentId ?? ''}
+              onChange={(e) => handleStudentChange(Number(e.target.value))}
+            >
+              {students.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name} ({s.student_id})
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+
         {/* Overall Progress Card */}
         <div className="bg-white rounded-lg shadow-md p-6 mb-6">
           <h2 className="text-xl font-semibold text-gray-900 mb-4">Overall Progress</h2>

@@ -23,10 +23,6 @@ export default function AdminPage() {
   });
 
   useEffect(() => {
-    if (localStorage.getItem('isAdmin') !== 'true') {
-      router.push('/dashboard');
-      return;
-    }
     loadData();
   }, []);
 
