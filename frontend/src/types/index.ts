@@ -54,11 +54,15 @@ export interface Substitution {
 }
 
 export interface LoginRequest {
-  email: string;
+  identifier: string;
   password: string;
 }
 
 export interface AuthResponse {
   access_token: string;
   token_type: string;
+  student_db_id: number;
+  student_number: string;
+  student_name: string;
+  is_admin: boolean;
 }

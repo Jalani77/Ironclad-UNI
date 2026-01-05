@@ -14,9 +14,13 @@ export default function DashboardPage() {
   useEffect(() => {
     const fetchAuditReport = async () => {
       try {
-        // In a real app, we'd get the student ID from the authenticated user
-        // For MVP, we'll use student ID 1 (Alice)
-        const data = await auditApi.getAuditReport(1);
+        const raw = localStorage.getItem('studentDbId');
+        const studentDbId = raw ? Number(raw) : NaN;
+        if (!Number.isFinite(studentDbId)) {
+          router.push('/');
+          return;
+        }
+        const data = await auditApi.getAuditReport(studentDbId);
         setReport(data);
       } catch (err: any) {
         setError('Failed to load audit report');
@@ -39,7 +43,13 @@ export default function DashboardPage() {
 
   const handleDownloadPDF = async () => {
     try {
-      const blob = await auditApi.downloadPDF(1);
+      const raw = localStorage.getItem('studentDbId');
+      const studentDbId = raw ? Number(raw) : NaN;
+      if (!Number.isFinite(studentDbId)) {
+        alert('Missing student id; please log in again.');
+        return;
+      }
+      const blob = await auditApi.downloadPDF(studentDbId);
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
@@ -86,12 +96,14 @@ export default function DashboardPage() {
               <p className="text-sm text-gray-500">{report.student.name} - {report.student.student_id}</p>
             </div>
             <div className="flex gap-3">
-              <button
-                onClick={() => router.push('/admin')}
-                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50"
-              >
-                Admin Panel
-              </button>
+              {localStorage.getItem('isAdmin') === 'true' ? (
+                <button
+                  onClick={() => router.push('/admin')}
+                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50"
+                >
+                  Admin Panel
+                </button>
+              ) : null}
               <button
                 onClick={handleDownloadPDF}
                 className="px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-md hover:bg-primary-700"

@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { LoginRequest, AuthResponse, AuditReport, Substitution, Course } from '@/types';
+import { LoginRequest, AuthResponse, AuditReport, Substitution, Course, Student } from '@/types';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
@@ -25,6 +25,10 @@ export const authApi = {
   login: async (credentials: LoginRequest): Promise<AuthResponse> => {
     const response = await api.post<AuthResponse>('/api/auth/login', credentials);
     return response.data;
+  },
+  me: async (): Promise<Student> => {
+    const response = await api.get('/api/auth/me');
+    return response.data as Student;
   },
 };
 
@@ -63,6 +67,13 @@ export const substitutionApi = {
 export const courseApi = {
   list: async (): Promise<Course[]> => {
     const response = await api.get<Course[]>('/api/courses');
+    return response.data;
+  },
+};
+
+export const studentApi = {
+  list: async (): Promise<Student[]> => {
+    const response = await api.get<Student[]>('/api/students');
     return response.data;
   },
 };

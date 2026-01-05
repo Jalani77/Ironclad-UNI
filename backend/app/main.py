@@ -16,7 +16,7 @@ from app.schemas import (
     ProgramCreate, Program as ProgramSchema,
     LoginRequest, Token, AuditReport
 )
-from app.auth import verify_password, get_password_hash, create_access_token
+from app.auth import verify_password, get_password_hash, create_access_token, get_current_student, require_admin, is_admin
 from app.audit_engine import AuditEngine
 from app.pdf_generator import generate_audit_pdf
 from app.config import get_settings
@@ -41,7 +41,12 @@ app.add_middleware(
 # Authentication
 @app.post("/api/auth/login", response_model=Token)
 def login(login_data: LoginRequest, db: Session = Depends(get_db)):
-    student = db.query(Student).filter(Student.email == login_data.email).first()
+    ident = (login_data.identifier or "").strip()
+    student = (
+        db.query(Student)
+        .filter((Student.email == ident) | (Student.student_id == ident))
+        .first()
+    )
     if not student or not verify_password(login_data.password, student.password_hash):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -52,7 +57,19 @@ def login(login_data: LoginRequest, db: Session = Depends(get_db)):
     access_token = create_access_token(
         data={"sub": student.email}, expires_delta=access_token_expires
     )
-    return {"access_token": access_token, "token_type": "bearer"}
+    return {
+        "access_token": access_token,
+        "token_type": "bearer",
+        "student_db_id": student.id,
+        "student_number": student.student_id,
+        "student_name": student.name,
+        "is_admin": is_admin(student),
+    }
+
+
+@app.get("/api/auth/me", response_model=StudentSchema)
+def auth_me(current_student: Student = Depends(get_current_student)):
+    return current_student
 
 
 # Student endpoints
@@ -72,7 +89,7 @@ def create_student(student: StudentCreate, db: Session = Depends(get_db)):
 
 
 @app.get("/api/students/{student_id}", response_model=StudentSchema)
-def get_student(student_id: int, db: Session = Depends(get_db)):
+def get_student(student_id: int, _: Student = Depends(get_current_student), db: Session = Depends(get_db)):
     student = db.query(Student).filter(Student.id == student_id).first()
     if not student:
         raise HTTPException(status_code=404, detail="Student not found")
@@ -80,7 +97,7 @@ def get_student(student_id: int, db: Session = Depends(get_db)):
 
 
 @app.get("/api/students", response_model=List[StudentSchema])
-def list_students(db: Session = Depends(get_db)):
+def list_students(_: Student = Depends(require_admin), db: Session = Depends(get_db)):
     return db.query(Student).all()
 
 
@@ -170,7 +187,7 @@ def list_enrollments(student_id: int = None, db: Session = Depends(get_db)):
 
 # Substitution endpoints (CRUD for admin)
 @app.post("/api/substitutions", response_model=SubstitutionSchema)
-def create_substitution(substitution: SubstitutionCreate, db: Session = Depends(get_db)):
+def create_substitution(substitution: SubstitutionCreate, _: Student = Depends(require_admin), db: Session = Depends(get_db)):
     db_substitution = Substitution(**substitution.dict())
     db.add(db_substitution)
     db.commit()
@@ -179,7 +196,7 @@ def create_substitution(substitution: SubstitutionCreate, db: Session = Depends(
 
 
 @app.get("/api/substitutions", response_model=List[SubstitutionSchema])
-def list_substitutions(student_id: int = None, db: Session = Depends(get_db)):
+def list_substitutions(student_id: int = None, _: Student = Depends(require_admin), db: Session = Depends(get_db)):
     query = db.query(Substitution)
     if student_id:
         query = query.filter(Substitution.student_id == student_id)
@@ -187,7 +204,7 @@ def list_substitutions(student_id: int = None, db: Session = Depends(get_db)):
 
 
 @app.get("/api/substitutions/{substitution_id}", response_model=SubstitutionSchema)
-def get_substitution(substitution_id: int, db: Session = Depends(get_db)):
+def get_substitution(substitution_id: int, _: Student = Depends(require_admin), db: Session = Depends(get_db)):
     substitution = db.query(Substitution).filter(Substitution.id == substitution_id).first()
     if not substitution:
         raise HTTPException(status_code=404, detail="Substitution not found")
@@ -198,6 +215,7 @@ def get_substitution(substitution_id: int, db: Session = Depends(get_db)):
 def update_substitution(
     substitution_id: int,
     substitution_update: SubstitutionUpdate,
+    _: Student = Depends(require_admin),
     db: Session = Depends(get_db)
 ):
     db_substitution = db.query(Substitution).filter(Substitution.id == substitution_id).first()
@@ -214,7 +232,7 @@ def update_substitution(
 
 
 @app.delete("/api/substitutions/{substitution_id}")
-def delete_substitution(substitution_id: int, db: Session = Depends(get_db)):
+def delete_substitution(substitution_id: int, _: Student = Depends(require_admin), db: Session = Depends(get_db)):
     db_substitution = db.query(Substitution).filter(Substitution.id == substitution_id).first()
     if not db_substitution:
         raise HTTPException(status_code=404, detail="Substitution not found")
@@ -226,7 +244,10 @@ def delete_substitution(substitution_id: int, db: Session = Depends(get_db)):
 
 # Audit endpoint
 @app.get("/api/audit/{student_id}", response_model=AuditReport)
-def get_audit_report(student_id: int, db: Session = Depends(get_db)):
+def get_audit_report(student_id: int, current: Student = Depends(get_current_student), db: Session = Depends(get_db)):
+    # Students can view self; admins can view anyone
+    if current.id != student_id:
+        require_admin(current)  # raises if not admin
     engine = AuditEngine(db)
     try:
         report = engine.run_audit(student_id)
@@ -236,7 +257,9 @@ def get_audit_report(student_id: int, db: Session = Depends(get_db)):
 
 
 @app.get("/api/audit/{student_id}/pdf")
-def get_audit_pdf(student_id: int, db: Session = Depends(get_db)):
+def get_audit_pdf(student_id: int, current: Student = Depends(get_current_student), db: Session = Depends(get_db)):
+    if current.id != student_id:
+        require_admin(current)
     engine = AuditEngine(db)
     try:
         report = engine.run_audit(student_id)

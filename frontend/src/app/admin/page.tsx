@@ -2,19 +2,20 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Substitution, Course } from '@/types';
-import { substitutionApi, courseApi } from '@/lib/api';
+import { Substitution, Course, Student } from '@/types';
+import { substitutionApi, courseApi, studentApi } from '@/lib/api';
 
 export default function AdminPage() {
   const router = useRouter();
   const [substitutions, setSubstitutions] = useState<Substitution[]>([]);
   const [courses, setCourses] = useState<Course[]>([]);
+  const [students, setStudents] = useState<Student[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreateForm, setShowCreateForm] = useState(false);
 
   // Form state
   const [formData, setFormData] = useState({
-    student_id: 1,
+    student_id: 0,
     original_course_id: 0,
     substitute_course_id: 0,
     reason: '',
@@ -22,17 +23,26 @@ export default function AdminPage() {
   });
 
   useEffect(() => {
+    if (localStorage.getItem('isAdmin') !== 'true') {
+      router.push('/dashboard');
+      return;
+    }
     loadData();
   }, []);
 
   const loadData = async () => {
     try {
-      const [subsData, coursesData] = await Promise.all([
+      const [subsData, coursesData, studentsData] = await Promise.all([
         substitutionApi.list(),
         courseApi.list(),
+        studentApi.list(),
       ]);
       setSubstitutions(subsData);
       setCourses(coursesData);
+      setStudents(studentsData);
+      if (studentsData.length && formData.student_id === 0) {
+        setFormData((prev) => ({ ...prev, student_id: studentsData[0].id }));
+      }
     } catch (err) {
       console.error('Failed to load data:', err);
     } finally {
@@ -46,7 +56,7 @@ export default function AdminPage() {
       await substitutionApi.create(formData);
       setShowCreateForm(false);
       setFormData({
-        student_id: 1,
+        student_id: students[0]?.id ?? 1,
         original_course_id: 0,
         substitute_course_id: 0,
         reason: '',
@@ -81,6 +91,11 @@ export default function AdminPage() {
   const getCourseCode = (courseId: number) => {
     const course = courses.find((c) => c.id === courseId);
     return course ? `${course.course_code} - ${course.name}` : 'Unknown';
+  };
+
+  const getStudentLabel = (studentDbId: number) => {
+    const s = students.find((st) => st.id === studentDbId);
+    return s ? `${s.name} (${s.student_id})` : String(studentDbId);
   };
 
   if (loading) {
@@ -127,15 +142,21 @@ export default function AdminPage() {
             <form onSubmit={handleCreate} className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Student ID
+                  Student
                 </label>
-                <input
-                  type="number"
+                <select
                   value={formData.student_id}
                   onChange={(e) => setFormData({ ...formData, student_id: parseInt(e.target.value) })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary-500 focus:border-primary-500"
                   required
-                />
+                >
+                  <option value={0}>Select a student</option>
+                  {students.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name} ({s.student_id})
+                    </option>
+                  ))}
+                </select>
               </div>
 
               <div>
@@ -262,7 +283,7 @@ export default function AdminPage() {
                       {sub.id}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {sub.student_id}
+                      {getStudentLabel(sub.student_id)}
                     </td>
                     <td className="px-6 py-4 text-sm text-gray-900">
                       {getCourseCode(sub.original_course_id)}

@@ -13,6 +13,9 @@ node_modules/
 .next/
 *.log
 
+# Local databases
+*.db
+
 # Environment
 .env
 .env.local

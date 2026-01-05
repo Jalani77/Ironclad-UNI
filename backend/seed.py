@@ -152,6 +152,19 @@ def seed_database():
         
         print(f"✓ Created {len(requirements)} requirements")
         
+        # Create demo admin
+        admin_student = Student(
+            student_id="00000000",
+            name="Admin User",
+            email="admin@ucla.edu",
+            password_hash=get_password_hash("admin123"),
+            program_id=program.id,
+        )
+        db.add(admin_student)
+        db.commit()
+        db.refresh(admin_student)
+        print("✓ Created admin user (admin@ucla.edu / admin123)")
+
         # Create 20 students with varying progress
         students_data = [
             {"id": "12345001", "name": "Alice Johnson", "email": "alice@ucla.edu"},
@@ -182,7 +195,7 @@ def seed_database():
                 student_id=student_data["id"],
                 name=student_data["name"],
                 email=student_data["email"],
-                password_hash=get_password_hash("password123"),  # Default password for all
+                password_hash=get_password_hash(student_data.get("password", "password123")),
                 program_id=program.id
             )
             db.add(student)
@@ -191,7 +204,7 @@ def seed_database():
         db.commit()
         for student in students:
             db.refresh(student)
-        print(f"✓ Created {len(students)} students (password: password123)")
+        print(f"✓ Created {len(students)} students")
         
         # Create enrollments with varying completion levels
         # Create diverse enrollment patterns
@@ -261,11 +274,13 @@ def seed_database():
         print("="*50)
         print(f"Program: {program.name}")
         print(f"Total courses: {len(courses)}")
-        print(f"Total students: {len(students)}")
+        print(f"Total students: {len(students) + 1} (includes admin)")
         print(f"Total requirements: {len(requirements)}")
         print("\nSample login credentials:")
         print("Email: alice@ucla.edu")
         print("Password: password123")
+        print("Admin Email: admin@ucla.edu")
+        print("Admin Password: admin123")
         print("="*50)
         
     except Exception as e:

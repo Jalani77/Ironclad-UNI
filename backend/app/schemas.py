@@ -131,6 +131,10 @@ class Substitution(SubstitutionBase):
 class Token(BaseModel):
     access_token: str
     token_type: str
+    student_db_id: int
+    student_number: str
+    student_name: str
+    is_admin: bool
 
 
 class TokenData(BaseModel):
@@ -138,7 +142,8 @@ class TokenData(BaseModel):
 
 
 class LoginRequest(BaseModel):
-    email: EmailStr
+    # Accept either email or student_id ("username") to reduce login confusion.
+    identifier: str
     password: str
 
 
