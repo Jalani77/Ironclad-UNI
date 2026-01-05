@@ -1,10 +1,10 @@
 import axios from 'axios';
 import { AuditReport, Substitution, Course, Student } from '@/types';
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
-
 const api = axios.create({
-  baseURL: API_BASE_URL,
+  // IMPORTANT: use same-origin so this works in port-forwarded/cloud dev.
+  // Next.js rewrites proxy `/api/*` to the backend.
+  baseURL: '',
   headers: {
     'Content-Type': 'application/json',
   },
