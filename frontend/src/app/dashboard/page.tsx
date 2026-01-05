@@ -5,6 +5,8 @@ import { useRouter } from 'next/navigation';
 import { AuditReport, Student } from '@/types';
 import { auditApi, studentApi } from '@/lib/api';
 
+const STORAGE_KEY = 'ironclad_selected_student_id';
+
 export default function DashboardPage() {
   const router = useRouter();
   const [report, setReport] = useState<AuditReport | null>(null);
@@ -18,7 +20,9 @@ export default function DashboardPage() {
       try {
         const all = await studentApi.list();
         setStudents(all);
-        const initialId = all[0]?.id ?? null;
+        const saved = localStorage.getItem(STORAGE_KEY);
+        const savedId = saved ? Number(saved) : NaN;
+        const initialId = Number.isFinite(savedId) ? savedId : all[0]?.id ?? null;
         setSelectedStudentId(initialId);
         if (!initialId) {
           setError('No students found. Run the seed script to generate mock data.');
@@ -27,7 +31,12 @@ export default function DashboardPage() {
         const data = await auditApi.getAuditReport(initialId);
         setReport(data);
       } catch (err: any) {
-        setError('Failed to load audit report');
+        const msg =
+          err?.response?.data?.detail ||
+          err?.response?.data?.message ||
+          err?.message ||
+          'Failed to load audit report';
+        setError(String(msg));
       } finally {
         setLoading(false);
       }
@@ -46,6 +55,7 @@ export default function DashboardPage() {
     setLoading(true);
     setError('');
     try {
+      localStorage.setItem(STORAGE_KEY, String(id));
       const data = await auditApi.getAuditReport(id);
       setReport(data);
     } catch {
@@ -86,7 +96,18 @@ export default function DashboardPage() {
   if (error || !report) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="text-xl text-red-600">{error || 'Failed to load report'}</div>
+        <div className="max-w-2xl rounded-lg bg-white p-6 shadow">
+          <div className="text-xl text-red-600">{error || 'Failed to load report'}</div>
+          <div className="mt-3 text-sm text-gray-600">
+            If you just removed login, make sure the backend is running and the database is seeded.
+          </div>
+          <button
+            className="mt-4 px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-md hover:bg-primary-700"
+            onClick={() => router.push('/')}
+          >
+            Back to student picker
+          </button>
+        </div>
       </div>
     );
   }
